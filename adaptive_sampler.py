@@ -41,37 +41,19 @@ def sample_adaptive_custom(
 
     current_sigma = sigma_max
     step_size = min_step_size  # First step = smallest
+    error_val = 1.0  # Initialize for first step logging
 
     total_steps = 0
     eps_prev = None
+    sigma_prev = sigma_max
     
     # Track sigma schedule
     sigma_schedule = [sigma_max]
 
     while current_sigma > sigma_min and total_steps < max_steps:
-        if callback is not None:
-            denoised = x + current_sigma * model(x, current_sigma * s_in, **extra_args)
-            callback({
-                'x': x,
-                'i': total_steps,
-                'sigma': current_sigma,
-                'sigma_hat': current_sigma,
-                'denoised': denoised
-            })
-
-        if not disable_pbar:
-            if eps_prev is not None:
-                print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
-            else:
-                print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}")
-
-        # Get current prediction
-        eps_current = model(x, current_sigma * s_in, **extra_args)
-
         # Run wrapped sampler for one step
         sigma_target = max(current_sigma - step_size, sigma_min)
-        dt = current_sigma - sigma_target
-
+        
         # Create a single-step sigma tensor for the wrapped sampler
         step_sigmas = torch.tensor([current_sigma, sigma_target], device=x.device, dtype=x.dtype)
         
@@ -81,27 +63,51 @@ def sample_adaptive_custom(
             x = wrapped_sampler.sampler_function(model, x, step_sigmas, extra_args, None, True)
         else:
             # Fallback to simple Euler
+            dt = current_sigma - sigma_target
+            eps_current = model(x, current_sigma * s_in, **extra_args)
             x = x - eps_current * dt
 
-        # Get new prediction for error calculation
-        eps_new = model(x, sigma_target * s_in, **extra_args)
+        # Get prediction at new sigma for error calculation
+        eps_current = model(x, sigma_target * s_in, **extra_args)
 
-        # Compute error between consecutive predictions
-        if error_type == "cosine":
-            error = 1.0 - get_cosine_similarity(eps_current, eps_new, dim=1).abs().mean()
-        else:
-            error = F.mse_loss(eps_current, eps_new)
+        if callback is not None:
+            denoised = x + sigma_target * eps_current
+            callback({
+                'x': x,
+                'i': total_steps,
+                'sigma': sigma_target,
+                'sigma_hat': sigma_target,
+                'denoised': denoised
+            })
 
-        error_val = max(error.item(), 1e-10)
+        if not disable_pbar:
+            if eps_prev is not None:
+                print(f"Step {total_steps + 1}: sigma={sigma_target:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
+            else:
+                print(f"Step {total_steps + 1}: sigma={sigma_target:.6f}, step_size={step_size:.6f}")
 
-        # Adjust step size for next iteration: base_step_size / error
-        step_size = base_step_size / error_val
-        step_size = max(min_step_size, min(max_step_size, step_size))
+        # Compute error between consecutive predictions (normalized)
+        if eps_prev is not None:
+            # Normalize by their respective sigmas
+            eps_prev_norm = eps_prev * sigma_prev
+            eps_curr_norm = eps_current * sigma_target
+            
+            if error_type == "cosine":
+                error = 1.0 - get_cosine_similarity(eps_prev_norm, eps_curr_norm, dim=1).abs().mean()
+            else:
+                error = F.mse_loss(eps_prev_norm, eps_curr_norm)
 
+            error_val = max(error.item(), 1e-10)
+
+            # Adjust step size for next iteration: base_step_size / error
+            step_size = base_step_size / error_val
+            step_size = max(min_step_size, min(max_step_size, step_size))
+
+        sigma_prev = sigma_target
         current_sigma = sigma_target
         sigma_schedule.append(sigma_target)
         total_steps += 1
-        eps_prev = eps_new
+        eps_prev = eps_current
 
     if not disable_pbar:
         print(f"Completed in {total_steps} steps, final sigma: {current_sigma:.6f}")
@@ -122,9 +128,9 @@ class AdaptiveSamplerCustom:
                 "sampler": ("SAMPLER",),
                 "latent_image": ("LATENT",),
                 "error_type": (["cosine", "mse"], {"default": "cosine"}),
-                "base_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 10.0, "step": 0.001}),
-                "min_step_size": ("FLOAT", {"default": 0.01, "min": 0.0001, "max": 10.0, "step": 0.0001}),
-                "max_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 10.0, "step": 0.001}),
+                "base_step_size": ("FLOAT", {"default": 1.0, "min": 0.0001, "max": 1.0, "step": 0.0001}),
+                "min_step_size": ("FLOAT", {"default": 0.01, "min": 0.0001, "max": 1.0, "step": 0.0001}),
+                "max_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 1.0, "step": 0.001}),
                 "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
             }
         }
