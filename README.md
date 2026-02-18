@@ -4,7 +4,7 @@ Adaptive sampling custom node for ComfyUI.
 
 ![Showcase](showcase.png)
 
-See `workflow_example.json` for an example workflow.
+See `anima_00265_.png` for an example workflow.
 
 ## Known Limitations
 
