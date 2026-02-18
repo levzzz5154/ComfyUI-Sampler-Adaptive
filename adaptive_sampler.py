@@ -60,7 +60,10 @@ def sample_adaptive_custom(
             })
 
         if not disable_pbar:
-            print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
+            if eps_prev is not None:
+                print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
+            else:
+                print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}")
 
         # Get current prediction
         eps_current = model(x, current_sigma * s_in, **extra_args)
