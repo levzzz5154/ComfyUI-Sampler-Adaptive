@@ -2,6 +2,10 @@
 
 Adaptive sampling custom node for ComfyUI.
 
+![Showcase](showcase.png)
+
+See `workflow_example.json` for an example workflow.
+
 ## Known Limitations
 
 - Ancestral samplers (e.g., `euler_ancestral`, `dpmpp_2s_ancestral`) do not work correctly at this time.
