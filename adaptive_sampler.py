@@ -22,7 +22,6 @@ def sample_adaptive_custom(
     disable=None,
     wrapped_sampler=None,
     error_type="cosine",
-    error_threshold=0.001,
     base_step_size=1.0,
     min_step_size=0.01,
     max_step_size=1.0,
@@ -61,7 +60,7 @@ def sample_adaptive_custom(
             })
 
         if not disable_pbar:
-            print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}")
+            print(f"Step {total_steps + 1}: sigma={current_sigma:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
 
         # Get current prediction
         eps_current = model(x, current_sigma * s_in, **extra_args)
@@ -92,15 +91,6 @@ def sample_adaptive_custom(
 
         error_val = max(error.item(), 1e-10)
 
-        # Check convergence
-        if error_val < error_threshold:
-            if not disable_pbar:
-                print(f"  Error {error_val:.6f} < threshold {error_threshold}, converged!")
-            current_sigma = sigma_target
-            sigma_schedule.append(sigma_target)
-            total_steps += 1
-            break
-
         # Adjust step size for next iteration: base_step_size / error
         step_size = base_step_size / error_val
         step_size = max(min_step_size, min(max_step_size, step_size))
@@ -129,7 +119,6 @@ class AdaptiveSamplerCustom:
                 "sampler": ("SAMPLER",),
                 "latent_image": ("LATENT",),
                 "error_type": (["cosine", "mse"], {"default": "cosine"}),
-                "error_threshold": ("FLOAT", {"default": 0.001, "min": 0.0, "max": 1.0, "step": 1e-6}),
                 "base_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 10.0, "step": 0.001}),
                 "min_step_size": ("FLOAT", {"default": 0.01, "min": 0.0001, "max": 10.0, "step": 0.0001}),
                 "max_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 10.0, "step": 0.001}),
@@ -149,7 +138,6 @@ class AdaptiveSamplerCustom:
         sampler,
         latent_image,
         error_type="cosine",
-        error_threshold=0.001,
         base_step_size=1.0,
         min_step_size=0.01,
         max_step_size=1.0,
@@ -188,7 +176,6 @@ class AdaptiveSamplerCustom:
                 disable=disable,
                 wrapped_sampler=sampler,
                 error_type=error_type,
-                error_threshold=error_threshold,
                 base_step_size=base_step_size,
                 min_step_size=min_step_size,
                 max_step_size=max_step_size,
