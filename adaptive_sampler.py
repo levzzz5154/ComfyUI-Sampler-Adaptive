@@ -26,12 +26,12 @@ def sample_adaptive_custom(
     min_step_size=0.01,
     max_step_size=1.0,
     max_steps=100,
+    smoothing_coef=0.5,
     sigma_schedule_out=None,
 ):
     """Adaptive sampler that wraps another sampler with adaptive step sizes."""
     
     extra_args = {} if extra_args is None else extra_args
-    s_in = x.new_ones([x.shape[0]])
 
     disable_pbar = disable if disable is not None else not comfy.utils.PROGRESS_BAR_ENABLED
 
@@ -41,14 +41,22 @@ def sample_adaptive_custom(
 
     current_sigma = sigma_max
     step_size = min_step_size  # First step = smallest
-    error_val = 1.0  # Initialize for first step logging
 
     total_steps = 0
-    eps_prev = None
-    sigma_prev = sigma_max
+    error_val = 1.0
+    v_prev = None
     
     # Track sigma schedule
     sigma_schedule = [sigma_max]
+
+    denoised_capture = [None]
+
+    def capture_denoised(inner_callback):
+        def wrapper(info):
+            denoised_capture[0] = info.get('denoised', None)
+            if inner_callback:
+                inner_callback(info)
+        return wrapper
 
     while current_sigma > sigma_min and total_steps < max_steps:
         # Run wrapped sampler for one step
@@ -57,57 +65,52 @@ def sample_adaptive_custom(
         # Create a single-step sigma tensor for the wrapped sampler
         step_sigmas = torch.tensor([current_sigma, sigma_target], device=x.device, dtype=x.dtype)
         
+        x_prev = x.clone()
+        
         # Run wrapped sampler (e.g., euler, heun)
-        if wrapped_sampler is not None:
-            # Call the sampler_function directly with proper args
-            x = wrapped_sampler.sampler_function(model, x, step_sigmas, extra_args, None, True)
-        else:
-            # Fallback to simple Euler
-            dt = current_sigma - sigma_target
-            eps_current = model(x, current_sigma * s_in, **extra_args)
-            x = x - eps_current * dt
+        wrapped_callback = capture_denoised(callback)
+        x = wrapped_sampler.sampler_function(model, x, step_sigmas, extra_args, wrapped_callback, disable_pbar)
 
-        # Get prediction at new sigma for error calculation
-        eps_current = model(x, sigma_target * s_in, **extra_args)
+        # Get velocity: v = denoised - x
+        denoised = denoised_capture[0]
+        if denoised is not None:
+            v_current = denoised - x
+        else:
+            v_current = x - x_prev
 
         if callback is not None:
-            denoised = x + sigma_target * eps_current
             callback({
                 'x': x,
                 'i': total_steps,
                 'sigma': sigma_target,
                 'sigma_hat': sigma_target,
-                'denoised': denoised
+                'denoised': denoised if denoised is not None else x
             })
 
         if not disable_pbar:
-            if eps_prev is not None:
+            if total_steps > 0:
                 print(f"Step {total_steps + 1}: sigma={sigma_target:.6f}, step_size={step_size:.6f}, error={error_val:.6f}")
             else:
                 print(f"Step {total_steps + 1}: sigma={sigma_target:.6f}, step_size={step_size:.6f}")
 
-        # Compute error between consecutive predictions (normalized)
-        if eps_prev is not None:
-            # Normalize by their respective sigmas
-            eps_prev_norm = eps_prev * sigma_prev
-            eps_curr_norm = eps_current * sigma_target
-            
+        # Compute error from velocity change
+        if v_prev is not None:
             if error_type == "cosine":
-                error = 1.0 - get_cosine_similarity(eps_prev_norm, eps_curr_norm, dim=1).abs().mean()
+                error = 1.0 - get_cosine_similarity(v_prev, v_current, dim=1).abs().mean()
             else:
-                error = F.mse_loss(eps_prev_norm, eps_curr_norm)
+                error = F.mse_loss(v_prev, v_current)
 
             error_val = max(error.item(), 1e-10)
 
             # Adjust step size for next iteration: base_step_size / error
-            step_size = base_step_size / error_val
-            step_size = max(min_step_size, min(max_step_size, step_size))
+            new_step_size = base_step_size / error_val
+            step_size = max(min_step_size, min(max_step_size, step_size * smoothing_coef + new_step_size * (1 - smoothing_coef)))
 
-        sigma_prev = sigma_target
+        v_prev = v_current
+
         current_sigma = sigma_target
         sigma_schedule.append(sigma_target)
         total_steps += 1
-        eps_prev = eps_current
 
     if not disable_pbar:
         print(f"Completed in {total_steps} steps, final sigma: {current_sigma:.6f}")
@@ -128,10 +131,11 @@ class AdaptiveSamplerCustom:
                 "sampler": ("SAMPLER",),
                 "latent_image": ("LATENT",),
                 "error_type": (["cosine", "mse"], {"default": "cosine"}),
-                "base_step_size": ("FLOAT", {"default": 1.0, "min": 0.0001, "max": 1.0, "step": 0.0001}),
-                "min_step_size": ("FLOAT", {"default": 0.01, "min": 0.0001, "max": 1.0, "step": 0.0001}),
-                "max_step_size": ("FLOAT", {"default": 1.0, "min": 0.001, "max": 1.0, "step": 0.001}),
+                "base_step_size": ("FLOAT", {"default": 0.0002, "min": 0.0001, "max": 1.0, "step": 0.0001}),
+                "min_step_size": ("FLOAT", {"default": 0.005, "min": 0.0001, "max": 1.0, "step": 0.0001}),
+                "max_step_size": ("FLOAT", {"default": 0.5, "min": 0.001, "max": 1.0, "step": 0.001}),
                 "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
+                "smoothing_coef": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -151,6 +155,7 @@ class AdaptiveSamplerCustom:
         min_step_size=0.01,
         max_step_size=1.0,
         max_steps=100,
+        smoothing_coef=0.5,
     ):
         latent = latent_image.copy()
         x = latent["samples"]
@@ -189,6 +194,7 @@ class AdaptiveSamplerCustom:
                 min_step_size=min_step_size,
                 max_step_size=max_step_size,
                 max_steps=max_steps,
+                smoothing_coef=smoothing_coef,
                 sigma_schedule_out=sigma_schedule_out,
             )
 
