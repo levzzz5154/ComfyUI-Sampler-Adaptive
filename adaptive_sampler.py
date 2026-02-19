@@ -28,6 +28,8 @@ def sample_adaptive_custom(
     max_steps=100,
     smoothing_coef=0.5,
     sigma_schedule_out=None,
+    denoise=1.0,
+    error_bias=0.0,
 ):
     """Adaptive sampler that wraps another sampler with adaptive step sizes."""
     
@@ -39,7 +41,7 @@ def sample_adaptive_custom(
     sigma_min = model_sampling.sigma_min
     sigma_max = model_sampling.sigma_max
 
-    current_sigma = sigma_max
+    current_sigma = sigma_min + (sigma_max - sigma_min) * denoise
     step_size = min_step_size  # First step = smallest
 
     total_steps = 0
@@ -47,7 +49,7 @@ def sample_adaptive_custom(
     v_prev = None
     
     # Track sigma schedule
-    sigma_schedule = [sigma_max]
+    sigma_schedule = [current_sigma]
 
     denoised_capture = [None]
 
@@ -103,7 +105,7 @@ def sample_adaptive_custom(
             error_val = max(error.item(), 1e-10)
 
             # Adjust step size for next iteration: base_step_size / error
-            new_step_size = base_step_size / error_val
+            new_step_size = base_step_size / (error_val + error_bias)
             step_size = max(min_step_size, min(max_step_size, step_size * smoothing_coef + new_step_size * (1 - smoothing_coef)))
 
         v_prev = v_current
@@ -130,12 +132,14 @@ class AdaptiveSamplerCustom:
                 "guider": ("GUIDER",),
                 "sampler": ("SAMPLER",),
                 "latent_image": ("LATENT",),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "error_type": (["cosine", "mse"], {"default": "cosine"}),
                 "base_step_size": ("FLOAT", {"default": 0.0002, "min": 0.0001, "max": 1.0, "step": 0.0001}),
                 "min_step_size": ("FLOAT", {"default": 0.005, "min": 0.0001, "max": 1.0, "step": 0.0001}),
                 "max_step_size": ("FLOAT", {"default": 0.5, "min": 0.001, "max": 1.0, "step": 0.001}),
                 "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
                 "smoothing_coef": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "error_bias": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -150,12 +154,14 @@ class AdaptiveSamplerCustom:
         guider,
         sampler,
         latent_image,
+        denoise=1.0,
         error_type="cosine",
         base_step_size=1.0,
         min_step_size=0.01,
         max_step_size=1.0,
         max_steps=100,
         smoothing_coef=0.5,
+        error_bias=0.0,
     ):
         latent = latent_image.copy()
         x = latent["samples"]
@@ -169,8 +175,10 @@ class AdaptiveSamplerCustom:
 
         # Create dummy sigmas for the wrapped sampler - we'll ignore them
         model_sampling = guider.model_patcher.get_model_object("model_sampling")
+        sigma_min = model_sampling.sigma_min
         sigma_max = model_sampling.sigma_max
-        sigmas = torch.tensor([sigma_max, 0.0], device=x.device, dtype=x.dtype)
+        start_sigma = sigma_min + (sigma_max - sigma_min) * denoise
+        sigmas = torch.tensor([start_sigma, 0.0], device=x.device, dtype=x.dtype)
 
         x0_output = {}
         callback = latent_preview.prepare_callback(guider.model_patcher, max_steps, x0_output)
@@ -196,6 +204,8 @@ class AdaptiveSamplerCustom:
                 max_steps=max_steps,
                 smoothing_coef=smoothing_coef,
                 sigma_schedule_out=sigma_schedule_out,
+                denoise=denoise,
+                error_bias=error_bias,
             )
 
         sampler_obj = KSAMPLER(adaptive_sampler_function, {})

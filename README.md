@@ -4,7 +4,7 @@ Adaptive sampling custom node for ComfyUI.
 
 ![Showcase](showcase.png)
 
-See `anima_00265_.png` for an example workflow.
+See `anima_00321_.png` for an example workflow.
 
 ## Known Limitations
 
@@ -19,4 +19,5 @@ See `anima_00265_.png` for an example workflow.
 - **min_step_size**: Minimum allowed step size
 - **max_step_size**: Maximum allowed step size
 - **max_steps**: Maximum number of adaptive steps
-- **smoothing_coef**: Smoothing coefficient for step size updates (0.0 = no smoothing, 1.0 = full smoothing)
+- **smoothing_coef**: EMA coefficient for step size updates. 0.0 = use only new calculated step size, 1.0 = keep previous step size unchanged, 0.5 = equal blend of old and new
+- **error_bias**: Bias added to error value in step size calculation (default: 0.0). Higher values result in smaller step sizes.
