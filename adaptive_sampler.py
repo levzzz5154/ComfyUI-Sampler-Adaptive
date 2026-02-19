@@ -132,14 +132,14 @@ class AdaptiveSamplerCustom:
                 "guider": ("GUIDER",),
                 "sampler": ("SAMPLER",),
                 "latent_image": ("LATENT",),
-                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "error_type": (["cosine", "mse"], {"default": "cosine"}),
-                "base_step_size": ("FLOAT", {"default": 0.0004, "min": 0.0001, "max": 1.0, "step": 0.0001}),
-                "min_step_size": ("FLOAT", {"default": 0.005, "min": 0.0001, "max": 1.0, "step": 0.0001}),
-                "max_step_size": ("FLOAT", {"default": 0.2, "min": 0.001, "max": 1.0, "step": 0.001}),
-                "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
-                "smoothing_coef": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "error_bias": ("FLOAT", {"default": 0.002, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Denoising strength (1.0 = full)"}),
+                "error_type": (["cosine", "mse"], {"default": "cosine", "tooltip": "cosine: measure direction change, mse: measure magnitude change"}),
+                "base_step_size": ("FLOAT", {"default": 0.0004, "min": 0.0001, "max": 1.0, "step": 0.0001, "tooltip": "Base multiplier for step size calculation"}),
+                "min_step_size": ("FLOAT", {"default": 0.005, "min": 0.0001, "max": 1.0, "step": 0.0001, "tooltip": "Minimum allowed step size"}),
+                "max_step_size": ("FLOAT", {"default": 0.2, "min": 0.001, "max": 1.0, "step": 0.001, "tooltip": "Maximum allowed step size"}),
+                "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000, "tooltip": "Maximum number of adaptive steps"}),
+                "smoothing_coef": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "EMA coefficient: 0 = new value only, 1 = keep old value"}),
+                "error_bias": ("FLOAT", {"default": 0.002, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "Bias added to error. Higher values = smaller steps"}),
             }
         }
 
