@@ -22,14 +22,14 @@ def sample_adaptive_custom(
     disable=None,
     wrapped_sampler=None,
     error_type="cosine",
-    base_step_size=1.0,
+    base_step_size=0.0004,
     min_step_size=0.01,
-    max_step_size=1.0,
+    max_step_size=0.2,
     max_steps=100,
-    smoothing_coef=0.5,
+    smoothing_coef=0.0,
     sigma_schedule_out=None,
     denoise=1.0,
-    error_bias=0.0,
+    error_bias=0.002,
 ):
     """Adaptive sampler that wraps another sampler with adaptive step sizes."""
     
@@ -134,12 +134,12 @@ class AdaptiveSamplerCustom:
                 "latent_image": ("LATENT",),
                 "denoise": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "error_type": (["cosine", "mse"], {"default": "cosine"}),
-                "base_step_size": ("FLOAT", {"default": 0.0002, "min": 0.0001, "max": 1.0, "step": 0.0001}),
+                "base_step_size": ("FLOAT", {"default": 0.0004, "min": 0.0001, "max": 1.0, "step": 0.0001}),
                 "min_step_size": ("FLOAT", {"default": 0.005, "min": 0.0001, "max": 1.0, "step": 0.0001}),
-                "max_step_size": ("FLOAT", {"default": 0.5, "min": 0.001, "max": 1.0, "step": 0.001}),
+                "max_step_size": ("FLOAT", {"default": 0.2, "min": 0.001, "max": 1.0, "step": 0.001}),
                 "max_steps": ("INT", {"default": 100, "min": 1, "max": 10000}),
-                "smoothing_coef": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.01}),
-                "error_bias": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "smoothing_coef": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "error_bias": ("FLOAT", {"default": 0.002, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -156,12 +156,12 @@ class AdaptiveSamplerCustom:
         latent_image,
         denoise=1.0,
         error_type="cosine",
-        base_step_size=1.0,
+        base_step_size=0.0004,
         min_step_size=0.01,
-        max_step_size=1.0,
+        max_step_size=0.2,
         max_steps=100,
-        smoothing_coef=0.5,
-        error_bias=0.0,
+        smoothing_coef=0.0,
+        error_bias=0.002,
     ):
         latent = latent_image.copy()
         x = latent["samples"]
