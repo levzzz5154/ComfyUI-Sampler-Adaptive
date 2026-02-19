@@ -10,6 +10,7 @@ See `anima_00265_.png` for an example workflow.
 
 - Ancestral samplers (e.g., `euler_ancestral`, `dpmpp_2s_ancestral`) do not work correctly at this time.
 - Samplers from RES4LYF are not supported.
+- Multistep/stateful samplers (e.g., `dpmpp_2m`, `lms`, `ipndm`, `dpmpp_2m_sde`) are not supported. They will produce output equivalent to first-order samplers. Use `euler`, `heun`, `dpm_2`, or other stateless samplers instead.
 
 ## Parameters
 
